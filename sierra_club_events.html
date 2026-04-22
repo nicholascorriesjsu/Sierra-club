@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sierra Club Events</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --forest:    #1E4D2B;
+      --mid-green: #2C7A3E;
+      --light-green: #4A9E5C;
+      --moss:      #8AB87A;
+      --cream:     #F5F0E8;
+      --off-white: #FAFAF7;
+      --dark-text: #1A2E1E;
+      --mid-text:  #4A6350;
+      --border:    #D4E4CC;
+      --card-bg:   #FFFFFF;
+      --shadow:    rgba(30, 77, 43, 0.10);
+    }
+
+    body {
+      font-family: 'Source Sans 3', sans-serif;
+      background: var(--off-white);
+      color: var(--dark-text);
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--forest);
+      padding: 0;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+    }
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      background: var(--moss);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+    .logo-text {
+      font-family: 'Playfair Display', serif;
+      font-size: 20px;
+      color: white;
+      letter-spacing: 0.02em;
+    }
+    .logo-sub {
+      font-size: 11px;
+      color: var(--moss);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      display: block;
+      margin-top: -2px;
+    }
+    .event-count-badge {
+      background: var(--moss);
+      color: var(--forest);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 20px;
+      display: none;
+    }
+
+    /* ── HERO STRIP ── */
+    .hero {
+      background: linear-gradient(135deg, var(--forest) 0%, var(--mid-green) 100%);
+      padding: 48px 24px 40px;
+      text-align: center;
+    }
+    .hero h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(28px, 5vw, 48px);
+      color: white;
+      margin-bottom: 10px;
+    }
+    .hero p {
+      color: var(--moss);
+      font-size: 16px;
+      font-weight: 300;
+    }
+
+    /* ── MAIN LAYOUT ── */
+    .main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 24px;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+    @media (max-width: 768px) {
+      .main { grid-template-columns: 1fr; padding: 16px; }
+    }
+
+    /* ── FILTER PANEL ── */
+    .filter-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      position: sticky;
+      top: 80px;
+      box-shadow: 0 2px 12px var(--shadow);
+    }
+    .filter-header {
+      background: var(--forest);
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .filter-header h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 16px;
+      color: white;
+    }
+    .filter-reset {
+      font-size: 12px;
+      color: var(--moss);
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-family: 'Source Sans 3', sans-serif;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+    }
+    .filter-reset:hover { color: white; }
+
+    .filter-section {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .filter-section:last-child { border-bottom: none; }
+    .filter-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--mid-text);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 10px;
+      display: block;
+    }
+
+    /* Keyword input */
+    .keyword-input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 14px;
+      color: var(--dark-text);
+      background: var(--off-white);
+      transition: border-color 0.2s;
+      outline: none;
+    }
+    .keyword-input:focus { border-color: var(--mid-green); }
+    .keyword-input::placeholder { color: #aaa; }
+
+    /* Category pills */
+    .category-pills {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--mid-text);
+      border: 1.5px solid var(--border);
+      background: var(--off-white);
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .pill:hover { border-color: var(--mid-green); color: var(--forest); }
+    .pill.active {
+      background: var(--forest);
+      border-color: var(--forest);
+      color: white;
+    }
+    .pill-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-outing      { background: #4A9E5C; }
+    .dot-club        { background: #4A7FB5; }
+    .dot-social      { background: #E0923A; }
+    .dot-activist    { background: #C0392B; }
+    .dot-all         { background: var(--moss); }
+
+    /* Host input */
+    .host-input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 14px;
+      color: var(--dark-text);
+      background: var(--off-white);
+      transition: border-color 0.2s;
+      outline: none;
+    }
+    .host-input:focus { border-color: var(--mid-green); }
+    .host-input::placeholder { color: #aaa; }
+
+    /* Leader input */
+    .leader-input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 14px;
+      color: var(--dark-text);
+      background: var(--off-white);
+      transition: border-color 0.2s;
+      outline: none;
+    }
+    .leader-input:focus { border-color: var(--mid-green); }
+    .leader-input::placeholder { color: #aaa; }
+
+    /* Apply filter button */
+    .apply-btn {
+      width: calc(100% - 40px);
+      margin: 16px 20px;
+      padding: 11px;
+      background: var(--mid-green);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      transition: background 0.2s;
+    }
+    .apply-btn:hover { background: var(--forest); }
+
+    /* ── VIEW TABS ── */
+    .content-area { min-width: 0; }
+    .view-tabs {
+      display: flex;
+      gap: 0;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 4px var(--shadow);
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 12px;
+      background: none;
+      border: none;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--mid-text);
+      cursor: pointer;
+      transition: all 0.15s;
+      border-right: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      letter-spacing: 0.03em;
+    }
+    .tab-btn:last-child { border-right: none; }
+    .tab-btn:hover { background: var(--cream); color: var(--forest); }
+    .tab-btn.active {
+      background: var(--forest);
+      color: white;
+    }
+    .tab-icon { font-size: 15px; }
+
+    /* ── STATUS BAR ── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: var(--mid-text);
+    }
+    .status-count { font-weight: 600; color: var(--forest); }
+
+    /* ── LEGEND ── */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+      background: var(--card-bg);
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--mid-text);
+      cursor: pointer;
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1.5px solid transparent;
+      transition: all 0.15s;
+    }
+    .legend-item:hover { border-color: var(--mid-green); color: var(--forest); }
+    .legend-item.active { border-color: var(--forest); color: var(--forest); background: var(--cream); }
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    /* ── EVENT CARDS (LIST VIEW) ── */
+    #list-view { display: block; }
+    #map-view, #calendar-view, #print-view { display: none; }
+
+    .events-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .event-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 22px;
+      display: grid;
+      grid-template-columns: 72px 1fr auto;
+      gap: 18px;
+      align-items: start;
+      transition: box-shadow 0.2s, transform 0.2s;
+      cursor: pointer;
+      box-shadow: 0 1px 4px var(--shadow);
+    }
+    .event-card:hover {
+      box-shadow: 0 6px 20px var(--shadow);
+      transform: translateY(-2px);
+    }
+    @media (max-width: 600px) {
+      .event-card { grid-template-columns: 56px 1fr; }
+      .event-links { grid-column: 1 / -1; }
+    }
+
+    /* Date block */
+    .event-date-block {
+      background: var(--forest);
+      border-radius: 10px;
+      text-align: center;
+      padding: 10px 6px;
+      color: white;
+      flex-shrink: 0;
+    }
+    .date-month {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--moss);
+      display: block;
+    }
+    .date-day {
+      font-family: 'Playfair Display', serif;
+      font-size: 26px;
+      line-height: 1;
+      display: block;
+    }
+    .date-year {
+      font-size: 10px;
+      color: var(--moss);
+      display: block;
+    }
+
+    /* Event info */
+    .event-info {}
+    .event-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 17px;
+      color: var(--dark-text);
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+    .event-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .meta-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 20px;
+      letter-spacing: 0.04em;
+    }
+    .tag-outing   { background: #E8F5E9; color: #2E7D32; }
+    .tag-club     { background: #E3F2FD; color: #1565C0; }
+    .tag-social   { background: #FFF3E0; color: #E65100; }
+    .tag-activist { background: #FFEBEE; color: #C62828; }
+    .tag-type     { background: var(--cream); color: var(--mid-text); }
+    .tag-virtual  { background: #F3E5F5; color: #6A1B9A; }
+    .tag-level    { background: #F1F8E9; color: #33691E; }
+
+    .event-location {
+      font-size: 13px;
+      color: var(--mid-text);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .event-sponsor {
+      font-size: 12px;
+      color: #888;
+      margin-top: 4px;
+    }
+
+    /* Links */
+    .event-links {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: flex-end;
+    }
+    .link-btn {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1.5px solid var(--mid-green);
+      color: var(--mid-green);
+      background: none;
+      cursor: pointer;
+      font-family: 'Source Sans 3', sans-serif;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .link-btn:hover { background: var(--mid-green); color: white; }
+    .link-btn.primary { background: var(--mid-green); color: white; }
+    .link-btn.primary:hover { background: var(--forest); border-color: var(--forest); }
+
+    /* ── MAP VIEW ── */
+    #map-view {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      height: 520px;
+      position: relative;
+    }
+    #map-container { width: 100%; height: 100%; }
+    .map-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--mid-text);
+      gap: 12px;
+    }
+    .map-placeholder .map-icon { font-size: 48px; }
+
+    /* ── CALENDAR VIEW ── */
+    #calendar-view {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .cal-header {
+      background: var(--forest);
+      color: white;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .cal-nav {
+      background: none;
+      border: 1.5px solid var(--moss);
+      color: white;
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+    .cal-nav:hover { background: rgba(255,255,255,0.15); }
+    .cal-month-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 20px;
+    }
+    .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+    }
+    .cal-day-label {
+      text-align: center;
+      padding: 10px 4px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--mid-text);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+      background: var(--cream);
+    }
+    .cal-cell {
+      min-height: 80px;
+      padding: 6px;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .cal-cell:nth-child(7n) { border-right: none; }
+    .cal-cell-num {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--mid-text);
+      margin-bottom: 4px;
+    }
+    .cal-cell.today .cal-cell-num {
+      background: var(--mid-green);
+      color: white;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .cal-cell.other-month { background: #fafafa; }
+    .cal-cell.other-month .cal-cell-num { color: #ccc; }
+    .cal-event-pill {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: pointer;
+    }
+    .cal-pill-outing   { background: #E8F5E9; color: #2E7D32; }
+    .cal-pill-club     { background: #E3F2FD; color: #1565C0; }
+    .cal-pill-social   { background: #FFF3E0; color: #E65100; }
+    .cal-pill-activist { background: #FFEBEE; color: #C62828; }
+
+    /* ── PRINT VIEW ── */
+    #print-view {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+    }
+    .print-event {
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 16px;
+    }
+    .print-event:last-child { border-bottom: none; }
+    .print-date { font-size: 13px; font-weight: 600; color: var(--mid-text); }
+    .print-name { font-size: 14px; font-weight: 600; color: var(--dark-text); margin-bottom: 4px; }
+    .print-meta { font-size: 12px; color: var(--mid-text); }
+
+    /* ── LOADING / EMPTY ── */
+    .loading-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--mid-text);
+    }
+    .loading-spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--mid-green);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--mid-text);
+    }
+    .empty-icon { font-size: 40px; margin-bottom: 12px; }
+
+    /* ── MOBILE FILTER TOGGLE ── */
+    .mobile-filter-toggle {
+      display: none;
+      width: 100%;
+      padding: 12px;
+      background: var(--forest);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 16px;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    @media (max-width: 768px) {
+      .mobile-filter-toggle { display: flex; }
+      .filter-panel { position: static; display: none; }
+      .filter-panel.open { display: block; }
+    }
+
+    /* ── CANCELLED BADGE ── */
+    .cancelled-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      background: #FFEBEE;
+      color: #C62828;
+      border-radius: 4px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-icon">🌲</div>
+      <div>
+        <span class="logo-text">Sierra Club</span>
+        <span class="logo-sub">Events</span>
+      </div>
+    </div>
+    <span class="event-count-badge" id="header-count"></span>
+  </div>
+</header>
+
+<div class="hero">
+  <h1>Upcoming Events</h1>
+  <p>Explore, enjoy, and protect the planet — find an event near you</p>
+</div>
+
+<div class="main">
+
+  <!-- FILTER PANEL -->
+  <aside>
+    <button class="mobile-filter-toggle" onclick="toggleMobileFilter()">
+      ⚙ Filter Events
+    </button>
+    <div class="filter-panel" id="filter-panel">
+      <div class="filter-header">
+        <h2>Filter Events</h2>
+        <button class="filter-reset" onclick="resetFilters()">Reset</button>
+      </div>
+
+      <div class="filter-section">
+        <span class="filter-label">Keyword</span>
+        <input class="keyword-input" id="keyword" type="text"
+               placeholder="Park name, location, topic…"
+               oninput="applyFilters()">
+      </div>
+
+      <div class="filter-section">
+        <span class="filter-label">Category</span>
+        <div class="category-pills">
+          <div class="pill active" data-cat="all" onclick="selectCategory('all')">
+            <span class="pill-dot dot-all"></span> All Categories
+          </div>
+          <div class="pill" data-cat="Outing" onclick="selectCategory('Outing')">
+            <span class="pill-dot dot-outing"></span> Outing
+          </div>
+          <div class="pill" data-cat="Club Support Event" onclick="selectCategory('Club Support Event')">
+            <span class="pill-dot dot-club"></span> Club Support Event
+          </div>
+          <div class="pill" data-cat="Social Event" onclick="selectCategory('Social Event')">
+            <span class="pill-dot dot-social"></span> Social Event
+          </div>
+          <div class="pill" data-cat="Activist Event" onclick="selectCategory('Activist Event')">
+            <span class="pill-dot dot-activist"></span> Activist Event
+          </div>
+        </div>
+      </div>
+
+      <div class="filter-section">
+        <span class="filter-label">Host</span>
+        <input class="host-input" id="host-filter" type="text"
+               placeholder="e.g. SF Bay Chapter…"
+               oninput="applyFilters()">
+      </div>
+
+      <div class="filter-section">
+        <span class="filter-label">Leader / Organizer</span>
+        <input class="leader-input" id="leader-filter" type="text"
+               placeholder="Leader name…"
+               oninput="applyFilters()">
+      </div>
+
+      <button class="apply-btn" onclick="applyFilters()">Apply Filters</button>
+    </div>
+  </aside>
+
+  <!-- CONTENT AREA -->
+  <div class="content-area">
+
+    <!-- VIEW TABS -->
+    <div class="view-tabs">
+      <button class="tab-btn active" onclick="switchView('list', this)">
+        <span class="tab-icon">☰</span> List
+      </button>
+      <button class="tab-btn" onclick="switchView('map', this)">
+        <span class="tab-icon">🗺</span> Map
+      </button>
+      <button class="tab-btn" onclick="switchView('calendar', this)">
+        <span class="tab-icon">📅</span> Calendar
+      </button>
+      <button class="tab-btn" onclick="switchView('print', this)">
+        <span class="tab-icon">🖨</span> Print
+      </button>
+    </div>
+
+    <!-- STATUS BAR -->
+    <div class="status-bar">
+      <span id="result-count" class="status-count">Loading events…</span>
+    </div>
+
+    <!-- LEGEND (clickable) -->
+    <div class="legend">
+      <span style="font-size:12px;font-weight:600;color:var(--mid-text);align-self:center;">Legend:</span>
+      <div class="legend-item active" data-cat="all" onclick="legendFilter('all')">
+        <span class="legend-dot" style="background:var(--moss)"></span> All
+      </div>
+      <div class="legend-item" data-cat="Outing" onclick="legendFilter('Outing')">
+        <span class="legend-dot" style="background:#4A9E5C"></span> Outing
+      </div>
+      <div class="legend-item" data-cat="Club Support Event" onclick="legendFilter('Club Support Event')">
+        <span class="legend-dot" style="background:#4A7FB5"></span> Club Support
+      </div>
+      <div class="legend-item" data-cat="Social Event" onclick="legendFilter('Social Event')">
+        <span class="legend-dot" style="background:#E0923A"></span> Social Event
+      </div>
+      <div class="legend-item" data-cat="Activist Event" onclick="legendFilter('Activist Event')">
+        <span class="legend-dot" style="background:#C0392B"></span> Activist Event
+      </div>
+    </div>
+
+    <!-- LIST VIEW -->
+    <div id="list-view">
+      <div class="loading-state" id="loading">
+        <div class="loading-spinner"></div>
+        <p>Fetching events from Sierra Club…</p>
+      </div>
+      <div class="events-list" id="events-list"></div>
+    </div>
+
+    <!-- MAP VIEW -->
+    <div id="map-view">
+      <div class="map-placeholder">
+        <div class="map-icon">🗺</div>
+        <p style="font-size:15px;font-weight:600;color:var(--forest)">Map View</p>
+        <p style="font-size:13px;">Event locations will appear here.</p>
+        <p style="font-size:12px;color:#aaa;margin-top:8px;">Integrate Google Maps or Leaflet.js for full map functionality.</p>
+      </div>
+    </div>
+
+    <!-- CALENDAR VIEW -->
+    <div id="calendar-view">
+      <div class="cal-header">
+        <button class="cal-nav" onclick="changeMonth(-1)">‹</button>
+        <span class="cal-month-title" id="cal-title"></span>
+        <button class="cal-nav" onclick="changeMonth(1)">›</button>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-day-label">Sun</div>
+        <div class="cal-day-label">Mon</div>
+        <div class="cal-day-label">Tue</div>
+        <div class="cal-day-label">Wed</div>
+        <div class="cal-day-label">Thu</div>
+        <div class="cal-day-label">Fri</div>
+        <div class="cal-day-label">Sat</div>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+
+    <!-- PRINT VIEW -->
+    <div id="print-view">
+      <h2 style="font-family:'Playfair Display',serif;color:var(--forest);margin-bottom:20px;font-size:22px;">
+        Upcoming Sierra Club Events
+      </h2>
+      <div id="print-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ── STATE ──
+  let allEvents = [];
+  let filteredEvents = [];
+  let activeCategory = 'all';
+  let currentView = 'list';
+  let calDate = new Date();
+
+  // ── FETCH EVENTS ──
+  async function fetchEvents() {
+    const BASE = 'https://act.sierraclub.org/events/services/apexrest/eventfeed';
+    try {
+      const res = await fetch(BASE + '/chapter/0100');
+      const data = await res.json();
+      if (data.eventList && data.eventList.length > 0) {
+        allEvents = data.eventList.map(mapEvent);
+      } else {
+        // Fallback to default feed
+        const res2 = await fetch(BASE + '?limit=30');
+        const data2 = await res2.json();
+        allEvents = (data2.eventList || []).map(mapEvent);
+      }
+    } catch(e) {
+      allEvents = getSampleEvents();
+    }
+    filteredEvents = [...allEvents];
+    document.getElementById('loading').style.display = 'none';
+    renderAll();
+  }
+
+  // ── MAP API → DATA MODEL ──
+  function mapEvent(e) {
+    return {
+      id:          e.Id,
+      name:        e.eventName,
+      category:    e.eventCategory || 'Other',
+      type:        e.eventType || '',
+      status:      e.status || 'Active',
+      startDate:   e.startDate,
+      startTime:   e.startTime || '',
+      endDate:     e.endDate || null,
+      location:    e.location || null,
+      lat:         e.lat || null,
+      lng:         e.lng || null,
+      isVirtual:   !e.lat && !e.lng,
+      sponsor:     e.sponsor || '',
+      entityName:  e.entityName || '',
+      leaders:     (e.leaderList || []).map(l => l.name).join(', '),
+      description: e.description || '',
+      cost:        e.cost || null,
+      isPaid:      e.paidEvent || false,
+      level:       e.level || null,
+      url:         e.urlToShare || '#',
+    };
+  }
+
+  // ── SAMPLE DATA (fallback if API blocked) ──
+  function getSampleEvents() {
+    const today = new Date();
+    const fmt = d => d.toISOString().split('T')[0];
+    const add = n => { const d = new Date(today); d.setDate(d.getDate()+n); return fmt(d); };
+    return [
+      { id:'1', name:'Mount Diablo Summit Hike', category:'Outing', type:'Hike',
+        status:'Active', startDate:add(2), startTime:'8:00 AM',
+        location:'3600 Mt Diablo Scenic Blvd, Danville, CA', lat:37.8816, lng:-121.9143,
+        isVirtual:false, sponsor:'SF Bay Chapter', entityName:'SF Bay Chapter',
+        leaders:'Jane Smith', description:'A challenging hike to the summit with panoramic views.',
+        cost:null, isPaid:false, level:'Strenuous', url:'#' },
+      { id:'2', name:'Zero Waste Committee Meeting', category:'Activist Event', type:'Other-Activist',
+        status:'Active', startDate:add(4), startTime:'7:00 PM',
+        location:'900 Murray St, Berkeley, CA', lat:37.8505, lng:-122.2905,
+        isVirtual:false, sponsor:'San Francisco Bay Chapter', entityName:'SF Bay Chapter',
+        leaders:'Alfred Twu', description:'Monthly zero waste committee meeting.',
+        cost:null, isPaid:false, level:null, url:'#' },
+      { id:'3', name:'Virtual Webinar: Climate Action 2025', category:'Club Support Event', type:'Educational',
+        status:'Active', startDate:add(6), startTime:'6:00 PM',
+        location:null, lat:null, lng:null,
+        isVirtual:true, sponsor:'Sierra Club National', entityName:'National',
+        leaders:'Dr. Sarah Lee', description:'Online webinar covering the latest in climate action.',
+        cost:null, isPaid:false, level:null, url:'#' },
+      { id:'4', name:'Coastal Cleanup & Beach Walk', category:'Outing', type:'Walking',
+        status:'Active', startDate:add(9), startTime:'9:00 AM',
+        location:'Baker Beach, San Francisco, CA', lat:37.7936, lng:-122.4835,
+        isVirtual:false, sponsor:'SF Bay Chp Hiking', entityName:'SF Bay Chapter',
+        leaders:'Maria Gonzalez', description:'Help clean up Baker Beach then enjoy a coastal walk.',
+        cost:null, isPaid:false, level:'Easy', url:'#' },
+      { id:'5', name:'Annual Fundraiser Dinner', category:'Social Event', type:'Dinner',
+        status:'Active', startDate:add(12), startTime:'6:30 PM',
+        location:'Ferry Building, San Francisco, CA', lat:37.7956, lng:-122.3935,
+        isVirtual:false, sponsor:'SF Bay Chapter', entityName:'SF Bay Chapter',
+        leaders:'Board of Directors', description:'Annual fundraiser to support Sierra Club programs.',
+        cost:'$75 per person', isPaid:true, level:null, url:'#' },
+      { id:'6', name:'Lands End Coastal Walk', category:'Outing', type:'Hike',
+        status:'Active', startDate:add(3), startTime:'9:00 AM',
+        location:'Lands End Visitor Center, San Francisco, CA', lat:37.78, lng:-122.511,
+        isVirtual:false, sponsor:'SF Bay Chp Hiking', entityName:'SF Bay Chapter',
+        leaders:'Guy Mayes', description:'Leisurely coastal history walk from Sutro Baths to Golden Gate.',
+        cost:null, isPaid:false, level:'Moderate', url:'#' },
+    ];
+  }
+
+  // ── FILTERS ──
+  function selectCategory(cat) {
+    activeCategory = cat;
+    document.querySelectorAll('.pill').forEach(p => p.classList.toggle('active', p.dataset.cat === cat));
+    syncLegend(cat);
+    applyFilters();
+  }
+
+  function legendFilter(cat) {
+    activeCategory = cat;
+    document.querySelectorAll('.legend-item').forEach(l => l.classList.toggle('active', l.dataset.cat === cat));
+    document.querySelectorAll('.pill').forEach(p => p.classList.toggle('active', p.dataset.cat === cat));
+    applyFilters();
+  }
+
+  function syncLegend(cat) {
+    document.querySelectorAll('.legend-item').forEach(l => l.classList.toggle('active', l.dataset.cat === cat));
+  }
+
+  function applyFilters() {
+    const kw     = document.getElementById('keyword').value.toLowerCase();
+    const host   = document.getElementById('host-filter').value.toLowerCase();
+    const leader = document.getElementById('leader-filter').value.toLowerCase();
+
+    filteredEvents = allEvents.filter(e => {
+      if (activeCategory !== 'all' && e.category !== activeCategory) return false;
+      if (kw && !e.name.toLowerCase().includes(kw) &&
+                !( e.location || '').toLowerCase().includes(kw) &&
+                !e.description.toLowerCase().includes(kw)) return false;
+      if (host   && !(e.sponsor || '').toLowerCase().includes(host)) return false;
+      if (leader && !e.leaders.toLowerCase().includes(leader)) return false;
+      return true;
+    });
+
+    renderAll();
+  }
+
+  function resetFilters() {
+    activeCategory = 'all';
+    document.getElementById('keyword').value = '';
+    document.getElementById('host-filter').value = '';
+    document.getElementById('leader-filter').value = '';
+    document.querySelectorAll('.pill').forEach(p => p.classList.toggle('active', p.dataset.cat === 'all'));
+    document.querySelectorAll('.legend-item').forEach(l => l.classList.toggle('active', l.dataset.cat === 'all'));
+    filteredEvents = [...allEvents];
+    renderAll();
+  }
+
+  // ── RENDER ALL VIEWS ──
+  function renderAll() {
+    const n = filteredEvents.length;
+    document.getElementById('result-count').textContent = `${n} event${n !== 1 ? 's' : ''} found`;
+    const badge = document.getElementById('header-count');
+    badge.textContent = n + ' events';
+    badge.style.display = n > 0 ? 'inline-block' : 'none';
+    renderList();
+    renderCalendar();
+    renderPrint();
+  }
+
+  // ── LIST VIEW ──
+  function renderList() {
+    const container = document.getElementById('events-list');
+    if (filteredEvents.length === 0) {
+      container.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">🔍</div>
+        <p style="font-size:16px;font-weight:600;color:var(--forest)">No events found</p>
+        <p style="font-size:13px;margin-top:6px;">Try adjusting your filters</p>
+      </div>`;
+      return;
+    }
+    container.innerHTML = filteredEvents.map(e => {
+      const d = e.startDate ? new Date(e.startDate + 'T12:00:00') : null;
+      const month = d ? d.toLocaleDateString('en-US',{month:'short'}).toUpperCase() : '';
+      const day   = d ? d.getDate() : '';
+      const year  = d ? d.getFullYear() : '';
+      const catTag = getCatTag(e.category);
+      const cancelled = e.status === 'Cancelled' ? '<span class="cancelled-badge">Cancelled</span>' : '';
+      const virtual = e.isVirtual ? '<span class="meta-tag tag-virtual">🖥 Virtual</span>' : '';
+      const level = e.level ? `<span class="meta-tag tag-level">${e.level}</span>` : '';
+      const typeTag = e.type ? `<span class="meta-tag tag-type">${e.type}</span>` : '';
+      const loc = e.isVirtual ? '🖥 Virtual event' : (e.location ? `📍 ${e.location}` : '📍 Location TBD');
+      const time = e.startTime ? ` · ${e.startTime}` : '';
+      return `
+        <div class="event-card">
+          <div class="event-date-block">
+            <span class="date-month">${month}</span>
+            <span class="date-day">${day}</span>
+            <span class="date-year">${year}</span>
+          </div>
+          <div class="event-info">
+            <div class="event-name">${e.name} ${cancelled}</div>
+            <div class="event-meta">
+              ${catTag}
+              ${typeTag}
+              ${virtual}
+              ${level}
+            </div>
+            <div class="event-location">${loc}${time}</div>
+            ${e.leaders ? `<div class="event-sponsor">👤 Leader: ${e.leaders}</div>` : ''}
+            <div class="event-sponsor">🌿 ${e.sponsor}</div>
+            ${e.cost ? `<div class="event-sponsor">💰 ${e.cost}</div>` : ''}
+          </div>
+          <div class="event-links">
+            <a class="link-btn primary" href="${e.url}" target="_blank">More Info</a>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function getCatTag(cat) {
+    const map = {
+      'Outing':            '<span class="meta-tag tag-outing">🥾 Outing</span>',
+      'Club Support Event':'<span class="meta-tag tag-club">🤝 Club Support</span>',
+      'Social Event':      '<span class="meta-tag tag-social">🎉 Social</span>',
+      'Activist Event':    '<span class="meta-tag tag-activist">✊ Activist</span>',
+    };
+    return map[cat] || `<span class="meta-tag tag-type">${cat}</span>`;
+  }
+
+  // ── VIEW SWITCHER ──
+  function switchView(view, btn) {
+    currentView = view;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('list-view').style.display     = view === 'list'     ? 'block' : 'none';
+    document.getElementById('map-view').style.display      = view === 'map'      ? 'block' : 'none';
+    document.getElementById('calendar-view').style.display = view === 'calendar' ? 'block' : 'none';
+    document.getElementById('print-view').style.display    = view === 'print'    ? 'block' : 'none';
+    if (view === 'calendar') renderCalendar();
+  }
+
+  // ── CALENDAR VIEW ──
+  function renderCalendar() {
+    const year  = calDate.getFullYear();
+    const month = calDate.getMonth();
+    document.getElementById('cal-title').textContent =
+      calDate.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+
+    const firstDay  = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month+1, 0).getDate();
+    const today = new Date();
+
+    let html = '';
+    let day = 1;
+    const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+
+    for (let i = 0; i < totalCells; i++) {
+      const isOtherMonth = i < firstDay || day > daysInMonth;
+      const cellDay = isOtherMonth ? '' : day;
+      const isToday = !isOtherMonth && day === today.getDate() &&
+                      month === today.getMonth() && year === today.getFullYear();
+      const cellClass = isOtherMonth ? 'cal-cell other-month' : (isToday ? 'cal-cell today' : 'cal-cell');
+
+      let eventsHtml = '';
+      if (!isOtherMonth) {
+        const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        const dayEvents = filteredEvents.filter(e => e.startDate === dateStr);
+        eventsHtml = dayEvents.slice(0,3).map(e => {
+          const pillClass = {
+            'Outing':'cal-pill-outing','Club Support Event':'cal-pill-club',
+            'Social Event':'cal-pill-social','Activist Event':'cal-pill-activist'
+          }[e.category] || 'cal-pill-outing';
+          return `<div class="cal-event-pill ${pillClass}" title="${e.name}">${e.name}</div>`;
+        }).join('');
+        if (dayEvents.length > 3) eventsHtml += `<div style="font-size:10px;color:#888">+${dayEvents.length-3} more</div>`;
+      }
+
+      html += `<div class="${cellClass}">
+        <div class="cal-cell-num">${cellDay}</div>
+        ${eventsHtml}
+      </div>`;
+
+      if (!isOtherMonth) day++;
+    }
+    document.getElementById('cal-grid').innerHTML = html;
+  }
+
+  function changeMonth(dir) {
+    calDate.setMonth(calDate.getMonth() + dir);
+    renderCalendar();
+  }
+
+  // ── PRINT VIEW ──
+  function renderPrint() {
+    const container = document.getElementById('print-list');
+    container.innerHTML = filteredEvents.map(e => {
+      const loc = e.isVirtual ? 'Virtual Event' : (e.location || 'TBD');
+      return `<div class="print-event">
+        <div class="print-date">${e.startDate}<br>${e.startTime}</div>
+        <div>
+          <div class="print-name">${e.name}</div>
+          <div class="print-meta">${e.category} · ${loc} · ${e.sponsor}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── MOBILE FILTER ──
+  function toggleMobileFilter() {
+    document.getElementById('filter-panel').classList.toggle('open');
+  }
+
+  // ── INIT ──
+  renderCalendar();
+  fetchEvents();
+</script>
+</body>
+</html>
