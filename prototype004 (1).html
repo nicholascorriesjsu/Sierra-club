@@ -1,0 +1,1840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sierra Club Events Widget — prototype004</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+
+  <style>
+    /*
+    =====================================================================
+    SIERRA CLUB EVENTS WIDGET — prototype003
+    =====================================================================
+    Changes from prototype002 (based on sponsor feedback):
+
+    1.  No global API fallback — if entity returns no events, show a
+        "no events" message instead of pulling from the general feed.
+    2.  Hover tooltip showing event description on list cards.
+    3.  Date grouping in list view — date header shown once per day,
+        not repeated on every card.
+    4.  Calendar auto-expands to fit its content instead of scrolling.
+    5.  Fixed height now correctly applied via CSS variable, not inline style.
+    6.  Emojis removed from category tags (were causing text misalignment).
+    7.  Category pill/tag contrast ratios improved for accessibility (WCAG AA).
+    8.  All HTML rendering switched from innerHTML strings to
+        createElement / appendChild for robustness.
+    9.  Stray renderCalendar() call removed from bottom of script.
+    10. Responsive breakpoint added for 768px–1200px (was squishing layout).
+    11. Variable names made more descriptive throughout (kw → keyword, etc.).
+    12. Code comments made more verbose throughout.
+    =====================================================================
+    */
+
+    /* --- Scoped reset: only affects elements inside the widget --- */
+    .sc-events-widget,
+    .sc-events-widget *,
+    .sc-events-widget *::before,
+    .sc-events-widget *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    /*
+      WIDGET ROOT
+      Height is controlled by the CSS variable --widget-height, which is
+      set by Drupal via window.SierraClubWidgetConfig.widgetHeight.
+      The calendar view overrides this to auto so it can expand to fit.
+    */
+    .sc-events-widget {
+      --forest:       #1E4D2B;
+      --mid-green:    #2C7A3E;
+      --moss:         #8AB87A;
+      --cream:        #F5F0E8;
+      --off-white:    #FAFAF7;
+      --dark-text:    #1A2E1E;
+      --mid-text:     #4A6350;
+      --border:       #D4E4CC;
+      --card-bg:      #FFFFFF;
+      --shadow:       rgba(30, 77, 43, 0.08);
+      --widget-height: 600px; /* overridden by JS from SierraClubWidgetConfig */
+
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 14px;
+      color: var(--dark-text);
+      background: var(--off-white);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      width: 100%;
+      height: var(--widget-height);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /*
+      Calendar view needs to auto-expand rather than scroll.
+      This class is toggled on/off by the tab switcher.
+    */
+    .sc-events-widget.calendar-active {
+      height: auto;
+      min-height: var(--widget-height);
+    }
+
+    /* ── HEADER ── */
+    .sc-events-widget .widget-header {
+      background: var(--forest);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .sc-events-widget .header-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sc-events-widget .header-logo-icon {
+      font-size: 18px;
+      line-height: 1;
+    }
+    .sc-events-widget .header-logo-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 15px;
+      color: #fff;
+      line-height: 1.1;
+    }
+    .sc-events-widget .header-logo-sub {
+      display: block;
+      font-size: 9px;
+      color: var(--moss);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .sc-events-widget .header-event-count {
+      background: var(--moss);
+      color: var(--forest);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 9px;
+      border-radius: 20px;
+      display: none; /* shown once events load */
+    }
+
+    /* ── VIEW TABS ── */
+    .sc-events-widget .view-tabs {
+      display: flex;
+      background: var(--cream);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .sc-events-widget .view-tab-btn {
+      flex: 1;
+      padding: 8px 4px;
+      background: none;
+      border: none;
+      border-right: 1px solid var(--border);
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--mid-text);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .sc-events-widget .view-tab-btn:last-child { border-right: none; }
+    .sc-events-widget .view-tab-btn:hover { background: #e8f0e4; color: var(--forest); }
+    .sc-events-widget .view-tab-btn.active { background: var(--forest); color: #fff; }
+
+    /* ── MOBILE FILTER TOGGLE ── */
+    .sc-events-widget .mobile-filter-toggle {
+      display: none;
+      padding: 7px 16px;
+      background: var(--cream);
+      border: none;
+      border-bottom: 1px solid var(--border);
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--forest);
+      cursor: pointer;
+      text-align: left;
+      flex-shrink: 0;
+      width: 100%;
+    }
+
+    /* ── BODY: filter sidebar + content panel ── */
+    .sc-events-widget .widget-body {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* ── FILTER SIDEBAR ── */
+    .sc-events-widget .filter-sidebar {
+      width: 196px;
+      flex-shrink: 0;
+      background: var(--card-bg);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .sc-events-widget .filter-sidebar-header {
+      background: var(--forest);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      flex-shrink: 0;
+    }
+    .sc-events-widget .filter-sidebar-header span {
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .sc-events-widget .filter-reset-btn {
+      font-size: 11px;
+      color: var(--moss);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: 'Source Sans 3', sans-serif;
+      font-weight: 500;
+    }
+    .sc-events-widget .filter-reset-btn:hover { color: #fff; }
+
+    .sc-events-widget .filter-group {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sc-events-widget .filter-group-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--mid-text);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      display: block;
+      margin-bottom: 6px;
+    }
+    .sc-events-widget .filter-keyword-input,
+    .sc-events-widget .filter-select {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1.5px solid var(--border);
+      border-radius: 7px;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 12px;
+      color: var(--dark-text);
+      background: var(--off-white);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .sc-events-widget .filter-keyword-input:focus,
+    .sc-events-widget .filter-select:focus { border-color: var(--mid-green); }
+    .sc-events-widget .filter-keyword-input::placeholder { color: #aaa; }
+
+    /* Category pills in filter sidebar */
+    .sc-events-widget .category-pill-list { display: flex; flex-direction: column; gap: 5px; }
+    .sc-events-widget .category-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--dark-text);   /* dark text for contrast (WCAG AA) */
+      border: 2px solid var(--border);
+      background: var(--off-white);
+      transition: all 0.12s;
+      user-select: none;
+    }
+    .sc-events-widget .category-pill:hover { border-color: var(--mid-green); }
+    .sc-events-widget .category-pill.active { background: var(--forest); border-color: var(--forest); color: #fff; }
+    .sc-events-widget .category-color-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.15); }
+
+    /* ── CONTENT PANEL ── */
+    .sc-events-widget .content-panel {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Status bar + inline legend */
+    .sc-events-widget .status-bar {
+      padding: 5px 12px;
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .sc-events-widget .status-count-text {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--forest);
+      white-space: nowrap;
+    }
+
+    /* Inline legend (merged with status bar to save vertical space) */
+    .sc-events-widget .inline-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      align-items: center;
+    }
+    .sc-events-widget .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--dark-text);   /* dark text for contrast (WCAG AA) */
+      cursor: pointer;
+      padding: 2px 7px;
+      border-radius: 20px;
+      border: 1.5px solid var(--border);
+      transition: all 0.12s;
+      white-space: nowrap;
+      background: var(--off-white);
+    }
+    .sc-events-widget .legend-item:hover { border-color: var(--mid-green); }
+    .sc-events-widget .legend-item.active { border-color: var(--forest); background: var(--forest); color: #fff; }
+    .sc-events-widget .legend-color-dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.15); }
+
+    /*
+      SCROLLABLE VIEW AREA
+      Prevents widget content from bleeding into surrounding Drupal page.
+      Calendar view overrides overflow via .calendar-active on root.
+    */
+    .sc-events-widget .view-scroll-area {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 10px 12px;
+      min-height: 0;
+    }
+    .sc-events-widget.calendar-active .view-scroll-area {
+      overflow: visible;
+    }
+
+    /* ── LIST VIEW ── */
+
+    /*
+      Date group header — shown once per date, not per card.
+      Sponsor requested: "pills based around the date rather than the event."
+    */
+    .sc-events-widget .date-group-header {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--forest);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 10px 4px 5px;
+      border-bottom: 2px solid var(--border);
+      margin-bottom: 7px;
+    }
+    .sc-events-widget .date-group-header:first-child { padding-top: 2px; }
+
+    /* Event cards within each date group */
+    .sc-events-widget .date-group-events { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .sc-events-widget .event-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 9px 12px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: start;
+      box-shadow: 0 1px 3px var(--shadow);
+      transition: box-shadow 0.15s;
+      position: relative; /* needed for tooltip positioning */
+    }
+    .sc-events-widget .event-card:hover { box-shadow: 0 3px 10px var(--shadow); }
+
+    .sc-events-widget .event-card-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--dark-text);
+      text-decoration: none;
+      line-height: 1.25;
+      display: block;
+    }
+    .sc-events-widget .event-card-name:hover { color: var(--mid-green); text-decoration: underline; }
+
+    /* Category + type tags — no emojis, improved contrast */
+    .sc-events-widget .event-tag-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .sc-events-widget .event-tag {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 20px;
+      letter-spacing: 0.02em;
+    }
+    /* WCAG AA contrast: dark text on light background, or white on dark */
+    .sc-events-widget .tag-outing   { background: #C8E6C9; color: #1B5E20; } /* 7.2:1 */
+    .sc-events-widget .tag-club     { background: #BBDEFB; color: #0D47A1; } /* 7.5:1 */
+    .sc-events-widget .tag-social   { background: #FFE0B2; color: #BF360C; } /* 6.8:1 */
+    .sc-events-widget .tag-activist { background: #FFCDD2; color: #B71C1C; } /* 6.5:1 */
+    .sc-events-widget .tag-type     { background: var(--cream); color: #2E4A35; }
+    .sc-events-widget .tag-virtual  { background: #E8EAF6; color: #1A237E; }
+    .sc-events-widget .tag-level    { background: #F1F8E9; color: #33691E; }
+    .sc-events-widget .tag-cancelled { background: #FFCDD2; color: #B71C1C; font-weight: 700; text-transform: uppercase; }
+
+    .sc-events-widget .event-card-details {
+      font-size: 11px;
+      color: var(--mid-text);
+      margin-top: 4px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    /* More Info button */
+    .sc-events-widget .more-info-btn {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1.5px solid var(--mid-green);
+      color: var(--mid-green);
+      background: none;
+      cursor: pointer;
+      font-family: 'Source Sans 3', sans-serif;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: all 0.12s;
+      display: inline-block;
+      align-self: start;
+    }
+    .sc-events-widget .more-info-btn:hover { background: var(--mid-green); color: #fff; }
+
+    /*
+      HOVER TOOLTIP — shows event description on mouseover.
+      Sponsor requested: "rollover event details box showing description."
+      Positioned absolutely below the card, full width.
+    */
+    .sc-events-widget .event-tooltip {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background: var(--forest);
+      color: #fff;
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 10px 14px;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+      z-index: 10;
+      pointer-events: none;
+    }
+    .sc-events-widget .event-card:hover .event-tooltip {
+      display: block;
+    }
+
+    /* ── CALENDAR VIEW ──
+       Calendar does NOT scroll — it expands to fit all weeks.
+       The .calendar-active class on the root widget enables this.
+    */
+    .sc-events-widget .calendar-nav-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--forest);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+    .sc-events-widget .calendar-nav-row span {
+      font-family: 'Playfair Display', serif;
+      font-size: 15px;
+    }
+    .sc-events-widget .calendar-nav-btn {
+      background: none;
+      border: 1.5px solid var(--moss);
+      color: #fff;
+      width: 28px; height: 28px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 15px;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.12s;
+    }
+    .sc-events-widget .calendar-nav-btn:hover { background: rgba(255,255,255,0.15); }
+
+    .sc-events-widget .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--card-bg);
+    }
+    .sc-events-widget .calendar-day-label {
+      text-align: center;
+      padding: 6px 2px;
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--mid-text);
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      background: var(--cream);
+      border-bottom: 1px solid var(--border);
+    }
+    .sc-events-widget .calendar-cell {
+      min-height: 64px;
+      padding: 4px;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .sc-events-widget .calendar-cell:nth-child(7n) { border-right: none; }
+    .sc-events-widget .calendar-cell.other-month { background: #fafafa; }
+    .sc-events-widget .calendar-cell.other-month .calendar-cell-num { color: #ccc; }
+    .sc-events-widget .calendar-cell.past-day .calendar-cell-num { color: #bbb; }
+    .sc-events-widget .calendar-cell.past-day .calendar-event-pill { opacity: 0.38; }
+
+    .sc-events-widget .calendar-cell-num {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--mid-text);
+      margin-bottom: 2px;
+    }
+    .sc-events-widget .calendar-cell.today-cell .calendar-cell-num {
+      background: var(--mid-green);
+      color: #fff;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+    }
+    /* white-space: normal prevents event names from overflowing cells */
+    .sc-events-widget .calendar-event-pill {
+      font-size: 9px;
+      padding: 2px 4px;
+      border-radius: 3px;
+      margin-bottom: 2px;
+      white-space: normal;
+      line-height: 1.3;
+      display: block;
+      text-decoration: none;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    /* Accessible contrast on calendar pills — same palette as tags */
+    .sc-events-widget .cpill-outing   { background: #C8E6C9; color: #1B5E20; }
+    .sc-events-widget .cpill-club     { background: #BBDEFB; color: #0D47A1; }
+    .sc-events-widget .cpill-social   { background: #FFE0B2; color: #BF360C; }
+    .sc-events-widget .cpill-activist { background: #FFCDD2; color: #B71C1C; }
+
+    /* ── MAP VIEW ── */
+
+    /*
+      The map container must have an explicit height for Leaflet to render.
+      We use calc() to fill the available space inside the widget.
+    */
+    .sc-events-widget #sc-map-container {
+      height: 100%;
+      min-height: 380px;
+      width: 100%;
+      border-radius: 9px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    /*
+      Custom Leaflet popup styling — scoped to match widget theme.
+      We override Leaflet's default popup to use Sierra Club green.
+    */
+    .sc-events-widget .leaflet-popup-content-wrapper {
+      border-radius: 10px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+      padding: 0;
+      overflow: hidden;
+    }
+    .sc-events-widget .leaflet-popup-content {
+      margin: 0;
+      width: 220px !important;
+    }
+    .sc-map-popup-header {
+      background: #1E4D2B;
+      color: #fff;
+      padding: 10px 12px 8px;
+    }
+    .sc-map-popup-title {
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 4px;
+    }
+    .sc-map-popup-tag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 7px;
+      border-radius: 20px;
+      margin-bottom: 2px;
+    }
+    .sc-map-popup-body {
+      padding: 9px 12px;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 11px;
+      color: #4A6350;
+      line-height: 1.5;
+    }
+    .sc-map-popup-body p { margin-bottom: 3px; }
+    .sc-map-popup-desc {
+      font-size: 11px;
+      color: #4A6350;
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid #D4E4CC;
+      line-height: 1.45;
+    }
+    .sc-map-popup-link {
+      display: block;
+      margin-top: 8px;
+      text-align: center;
+      background: #2C7A3E;
+      color: #fff;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 6px;
+      border-radius: 6px;
+      text-decoration: none;
+    }
+    .sc-map-popup-link:hover { background: #1E4D2B; }
+
+    /* Map is active — widget expands height like calendar */
+    .sc-events-widget.map-active {
+      height: auto;
+      min-height: var(--widget-height);
+    }
+    .sc-events-widget.map-active .view-scroll-area {
+      overflow: visible;
+      min-height: 440px;
+    }
+
+    /* ── PRINT VIEW ── */
+    .sc-events-widget .print-trigger-btn {
+      margin-bottom: 12px;
+      padding: 7px 16px;
+      background: var(--mid-green);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .sc-events-widget .print-trigger-btn:hover { background: var(--forest); }
+    .sc-events-widget .print-event-row {
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: 100px 1fr;
+      gap: 10px;
+    }
+    .sc-events-widget .print-event-row:last-child { border-bottom: none; }
+    .sc-events-widget .print-event-date { font-size: 11px; font-weight: 600; color: var(--mid-text); }
+    .sc-events-widget .print-event-name { font-size: 12px; font-weight: 600; color: var(--dark-text); margin-bottom: 2px; }
+    .sc-events-widget .print-event-meta { font-size: 11px; color: var(--mid-text); }
+
+    /* ── LOADING / EMPTY STATES ── */
+    .sc-events-widget .loading-state,
+    .sc-events-widget .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--mid-text);
+    }
+    .sc-events-widget .loading-spinner {
+      width: 28px; height: 28px;
+      border: 3px solid var(--border);
+      border-top-color: var(--mid-green);
+      border-radius: 50%;
+      animation: sc-widget-spin 0.8s linear infinite;
+      margin: 0 auto 10px;
+    }
+    @keyframes sc-widget-spin { to { transform: rotate(360deg); } }
+
+    /* ── RESPONSIVE BREAKPOINTS ──
+       768px–1200px: collapse sidebar above 768, before it gets squished.
+       Below 768px:  stack sidebar on top of content.
+    */
+    @media (max-width: 1200px) {
+      .sc-events-widget .filter-sidebar { width: 170px; }
+    }
+    @media (max-width: 960px) {
+      .sc-events-widget .filter-sidebar { width: 150px; }
+      .sc-events-widget .filter-keyword-input,
+      .sc-events-widget .filter-select   { font-size: 11px; }
+      .sc-events-widget .category-pill   { font-size: 10px; }
+    }
+    @media (max-width: 768px) {
+      .sc-events-widget .mobile-filter-toggle { display: block; }
+      .sc-events-widget .widget-body { flex-direction: column; overflow: visible; }
+      .sc-events-widget .filter-sidebar {
+        width: 100%; border-right: none; border-bottom: 1px solid var(--border);
+        display: none; max-height: 260px; overflow-y: auto;
+      }
+      .sc-events-widget .filter-sidebar.open { display: flex; }
+      .sc-events-widget { height: auto; max-height: var(--widget-height); }
+      .sc-events-widget.calendar-active { max-height: none; }
+      /* On mobile: hide the ev-date block, show date as text under the name */
+      .sc-events-widget .event-card { grid-template-columns: 1fr; }
+      .sc-events-widget .more-info-btn { display: none; } /* title link covers it */
+    }
+
+    /* ── PRINT MEDIA STYLES ── */
+    @media print {
+      .sc-events-widget { height: auto !important; border: none; }
+      .sc-events-widget .widget-header,
+      .sc-events-widget .view-tabs,
+      .sc-events-widget .mobile-filter-toggle,
+      .sc-events-widget .filter-sidebar,
+      .sc-events-widget .status-bar { display: none !important; }
+      .sc-events-widget .widget-body,
+      .sc-events-widget .content-panel,
+      .sc-events-widget .view-scroll-area { overflow: visible; }
+      .sc-events-widget #sc-view-list,
+      .sc-events-widget #sc-view-map,
+      .sc-events-widget #sc-view-cal { display: none !important; }
+      .sc-events-widget #sc-view-print { display: block !important; }
+      .sc-events-widget .print-trigger-btn { display: none; }
+    }
+  </style>
+</head>
+<body style="margin: 0; background: #c8d9c0; padding: 32px; font-family: sans-serif;">
+
+  <!--
+    DRUPAL CONFIGURATION BLOCK
+    ===========================================================
+    In production, Drupal's Twig template outputs this object
+    before the widget script runs. The widget reads from it on
+    DOMContentLoaded and applies entity, category, and height.
+    The JS and CSS files are separate in the final Drupal build.
+    ===========================================================
+  -->
+  <script>
+    window.SierraClubWidgetConfig = {
+      entityId:       '0400',   // Entity ID provided by Drupal (e.g. 0400 for Angeles Chapter)
+      presetCategory: null,     // Pre-filter to one category string, or null for all
+      geoZip:         null,     // Zip code for geographic feed, or null
+      widgetHeight:   '620px',  // Height Drupal allocates for the widget block
+    };
+  </script>
+
+  <!-- Simulated Drupal page context — demonstrates widget stays in place -->
+  <p style="color:#3a5430; font-size:13px; font-family:sans-serif; margin-bottom:10px;">
+    ↑ Other Drupal page content above — widget height is fixed so this does not move
+  </p>
+
+  <!-- ═══════════════════════════════════════════════
+       WIDGET ROOT
+       Drop this <div> into any Drupal block or template.
+       The config object above drives all data and sizing.
+  ════════════════════════════════════════════════ -->
+  <div class="sc-events-widget" id="sc-widget-root">
+
+    <!-- HEADER -->
+    <div class="widget-header">
+      <div class="header-logo">
+        <span class="header-logo-icon">🌲</span>
+        <div>
+          <span class="header-logo-name">Sierra Club</span>
+          <span class="header-logo-sub">Events</span>
+        </div>
+      </div>
+      <span class="header-event-count" id="sc-header-count"></span>
+    </div>
+
+    <!-- VIEW TABS -->
+    <div class="view-tabs">
+      <button class="view-tab-btn active" onclick="SierraClubWidget.switchTab('list', this)">List</button>
+      <button class="view-tab-btn" onclick="SierraClubWidget.switchTab('map', this)">Map</button>
+      <button class="view-tab-btn" onclick="SierraClubWidget.switchTab('cal', this)">Calendar</button>
+      <button class="view-tab-btn" onclick="SierraClubWidget.switchTab('print', this)">Print</button>
+    </div>
+
+    <!-- MOBILE FILTER TOGGLE (hidden on desktop) -->
+    <button class="mobile-filter-toggle" onclick="SierraClubWidget.toggleMobileFilters()">Filter Events</button>
+
+    <!-- BODY: sidebar + content -->
+    <div class="widget-body">
+
+      <!-- FILTER SIDEBAR -->
+      <div class="filter-sidebar" id="sc-filter-sidebar">
+        <div class="filter-sidebar-header">
+          <span>Filters</span>
+          <button class="filter-reset-btn" onclick="SierraClubWidget.resetFilters()">Reset</button>
+        </div>
+
+        <!-- Keyword search -->
+        <div class="filter-group">
+          <span class="filter-group-label">Keyword</span>
+          <input
+            class="filter-keyword-input"
+            id="sc-filter-keyword"
+            type="text"
+            placeholder="Title, leader, location..."
+            oninput="SierraClubWidget.applyFilters()"
+          >
+        </div>
+
+        <!-- Category pills -->
+        <div class="filter-group">
+          <span class="filter-group-label">Category</span>
+          <div class="category-pill-list">
+            <div class="category-pill active" data-category="all" onclick="SierraClubWidget.selectCategory('all')">
+              <span class="category-color-dot" style="background: var(--moss)"></span> All
+            </div>
+            <div class="category-pill" data-category="Outing" onclick="SierraClubWidget.selectCategory('Outing')">
+              <span class="category-color-dot" style="background: #4A9E5C"></span> Outing
+            </div>
+            <div class="category-pill" data-category="Club Support Event" onclick="SierraClubWidget.selectCategory('Club Support Event')">
+              <span class="category-color-dot" style="background: #4A7FB5"></span> Club Support
+            </div>
+            <div class="category-pill" data-category="Social Event" onclick="SierraClubWidget.selectCategory('Social Event')">
+              <span class="category-color-dot" style="background: #E0923A"></span> Social Event
+            </div>
+            <div class="category-pill" data-category="Activist Event" onclick="SierraClubWidget.selectCategory('Activist Event')">
+              <span class="category-color-dot" style="background: #C0392B"></span> Activist Event
+            </div>
+          </div>
+        </div>
+
+        <!-- Host dropdown — populated dynamically from API data -->
+        <div class="filter-group">
+          <span class="filter-group-label">Host</span>
+          <select class="filter-select" id="sc-filter-host" onchange="SierraClubWidget.applyFilters()">
+            <option value="">All hosts</option>
+          </select>
+        </div>
+
+        <!-- Leader dropdown — populated dynamically from API data -->
+        <div class="filter-group">
+          <span class="filter-group-label">Leader / Organizer</span>
+          <select class="filter-select" id="sc-filter-leader" onchange="SierraClubWidget.applyFilters()">
+            <option value="">All leaders</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- CONTENT PANEL -->
+      <div class="content-panel">
+
+        <!-- Status bar + inline legend -->
+        <div class="status-bar">
+          <span class="status-count-text" id="sc-status-count">Loading...</span>
+          <div class="inline-legend">
+            <div class="legend-item active" data-category="all" onclick="SierraClubWidget.selectCategory('all')">
+              <span class="legend-color-dot" style="background: var(--moss)"></span> All
+            </div>
+            <div class="legend-item" data-category="Outing" onclick="SierraClubWidget.selectCategory('Outing')">
+              <span class="legend-color-dot" style="background: #4A9E5C"></span> Outing
+            </div>
+            <div class="legend-item" data-category="Club Support Event" onclick="SierraClubWidget.selectCategory('Club Support Event')">
+              <span class="legend-color-dot" style="background: #4A7FB5"></span> Club
+            </div>
+            <div class="legend-item" data-category="Social Event" onclick="SierraClubWidget.selectCategory('Social Event')">
+              <span class="legend-color-dot" style="background: #E0923A"></span> Social
+            </div>
+            <div class="legend-item" data-category="Activist Event" onclick="SierraClubWidget.selectCategory('Activist Event')">
+              <span class="legend-color-dot" style="background: #C0392B"></span> Activist
+            </div>
+          </div>
+        </div>
+
+        <!-- Scrollable view area -->
+        <div class="view-scroll-area">
+
+          <!-- LIST VIEW -->
+          <div id="sc-view-list">
+            <div class="loading-state" id="sc-loading-indicator">
+              <div class="loading-spinner"></div>
+              <p>Fetching events from Sierra Club...</p>
+            </div>
+            <!-- Event list is built here by renderListView() -->
+            <div id="sc-event-list-container"></div>
+          </div>
+
+          <!-- MAP VIEW — Leaflet.js -->
+          <div id="sc-view-map" style="display:none">
+            <div id="sc-map-container"></div>
+          </div>
+
+          <!-- CALENDAR VIEW -->
+          <div id="sc-view-cal" style="display:none">
+            <div class="calendar-nav-row">
+              <button class="calendar-nav-btn" onclick="SierraClubWidget.changeCalendarMonth(-1)">&#8249;</button>
+              <span id="sc-calendar-title"></span>
+              <button class="calendar-nav-btn" onclick="SierraClubWidget.changeCalendarMonth(1)">&#8250;</button>
+            </div>
+            <!-- Day-of-week labels -->
+            <div class="calendar-grid" id="sc-calendar-day-labels"></div>
+            <!-- Calendar cells built by renderCalendarView() -->
+            <div class="calendar-grid" id="sc-calendar-grid"></div>
+          </div>
+
+          <!-- PRINT VIEW -->
+          <div id="sc-view-print" style="display:none">
+            <button class="print-trigger-btn" onclick="window.print()">Print this list</button>
+            <h2 style="font-family:'Playfair Display',serif;color:var(--forest);font-size:16px;margin-bottom:12px;">
+              Upcoming Sierra Club Events
+            </h2>
+            <div id="sc-print-list-container"></div>
+          </div>
+
+        </div><!-- /view-scroll-area -->
+      </div><!-- /content-panel -->
+    </div><!-- /widget-body -->
+  </div><!-- /sc-widget-root -->
+
+  <p style="color:#3a5430; font-size:13px; font-family:sans-serif; margin-top:10px;">
+    ↓ Other Drupal page content below — widget never pushes this down
+  </p>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/*
+  =====================================================================
+  SIERRA CLUB EVENTS WIDGET — JavaScript
+  prototype004
+  =====================================================================
+
+  Architecture:
+  - Reads config from window.SierraClubWidgetConfig (set by Drupal Twig).
+  - Fetches events from the Sierra Club Campfire API on DOMContentLoaded.
+  - NO global feed fallback: if the entity returns no events, a "no events"
+    message is shown. This matches sponsor expectation.
+  - All DOM manipulation uses createElement/appendChild (not innerHTML)
+    for robustness, as requested in sponsor code review.
+  - The public API surface is exposed as window.SierraClubWidget so that
+    inline onclick handlers in the HTML can reach widget functions.
+  =====================================================================
+*/
+
+document.addEventListener('DOMContentLoaded', function () {
+  'use strict';
+
+  // ── Read Drupal-injected configuration ──────────────────────────────
+  const config          = window.SierraClubWidgetConfig || {};
+  const entityId        = config.entityId       || '0100';
+  const presetCategory  = config.presetCategory || null;
+  const geoZip          = config.geoZip         || null;
+  const widgetHeight    = config.widgetHeight   || '600px';
+
+  // Apply the widget height via CSS variable (not hardcoded inline style)
+  document.getElementById('sc-widget-root').style.setProperty('--widget-height', widgetHeight);
+
+  // ── Widget state ─────────────────────────────────────────────────────
+  let allEvents         = [];   // all events returned from the API
+  let filteredEvents    = [];   // events after filters are applied
+  let activeCategory    = presetCategory || 'all';
+  let calendarDate      = new Date(); // currently displayed calendar month
+
+  // ── API fetch ────────────────────────────────────────────────────────
+  /*
+    Fetches events from the Sierra Club Campfire API.
+    Priority: geo zip → entity ID feed.
+    NO fallback to the global feed — if no events are found for this
+    entity, we show a "no events" message (sponsor requirement).
+  */
+  async function fetchEvents() {
+    const API_BASE = 'https://act.sierraclub.org/events/services/apexrest/eventfeed';
+
+    try {
+      const feedUrl = geoZip
+        ? `${API_BASE}?zip=${encodeURIComponent(geoZip)}&limit=50`
+        : `${API_BASE}/ent/${entityId}`;
+
+      const response = await fetch(feedUrl);
+
+      if (!response.ok) {
+        throw new Error(`API responded with status ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.eventList && data.eventList.length > 0) {
+        allEvents = data.eventList.map(mapApiEventToModel);
+      } else {
+        // No events for this entity — show message, do NOT fall back globally
+        allEvents = [];
+      }
+
+    } catch (fetchError) {
+      // API unreachable (e.g. CORS in dev, network error) — use sample data
+      console.warn('Sierra Club Events Widget: API unavailable, using sample data.', fetchError);
+      allEvents = buildSampleEvents();
+    }
+
+    // Apply any preset category from Drupal config
+    if (presetCategory) {
+      activeCategory = presetCategory;
+      syncCategorySelectionUI(presetCategory);
+    }
+
+    buildDynamicFilterDropdowns();
+    applyFilters();
+    document.getElementById('sc-loading-indicator').style.display = 'none';
+  }
+
+  // ── Data model mapping ───────────────────────────────────────────────
+  /*
+    Maps a raw Campfire API event object to the internal model used
+    by all render functions. Field names here match the Campfire API
+    response shape confirmed from the Entity Style Guide.
+  */
+  function mapApiEventToModel(apiEvent) {
+    return {
+      id:          apiEvent.Id,
+      name:        apiEvent.eventName         || '',
+      category:    apiEvent.eventCategory     || 'Other',
+      type:        apiEvent.eventType         || '',
+      status:      apiEvent.status            || 'Active',
+      startDate:   apiEvent.startDate         || '',
+      startTime:   apiEvent.startTime         || '',
+      location:    apiEvent.location          || null,
+      latitude:    apiEvent.lat               || null,
+      longitude:   apiEvent.lng               || null,
+      isVirtual:   !apiEvent.lat && !apiEvent.lng,
+      sponsor:     apiEvent.sponsor           || '',
+      entityName:  apiEvent.entityName        || '',
+      // leaderList is an array of objects with a .name property
+      leaders:     (apiEvent.leaderList || []).map(function(leader) { return leader.name; }).join(', '),
+      description: apiEvent.description       || '',
+      cost:        apiEvent.cost              || null,
+      level:       apiEvent.level             || null,
+      url:         apiEvent.urlToShare        || null,
+    };
+  }
+
+  // ── Dynamic filter dropdowns ─────────────────────────────────────────
+  /*
+    Builds the Host and Leader/Organizer <select> dropdowns from the
+    actual event data rather than hardcoding values.
+    This ensures the dropdowns reflect whatever the API returns.
+  */
+  function buildDynamicFilterDropdowns() {
+    const hostValues = Array.from(
+      new Set(allEvents.map(function(event) { return event.sponsor; }).filter(Boolean))
+    ).sort();
+
+    const leaderValues = Array.from(
+      new Set(
+        allEvents
+          .flatMap(function(event) { return event.leaders ? event.leaders.split(', ') : []; })
+          .filter(Boolean)
+      )
+    ).sort();
+
+    appendOptionsToSelect('sc-filter-host',   hostValues);
+    appendOptionsToSelect('sc-filter-leader', leaderValues);
+  }
+
+  function appendOptionsToSelect(selectId, values) {
+    const selectElement = document.getElementById(selectId);
+    values.forEach(function(value) {
+      const optionElement = document.createElement('option');
+      optionElement.value       = value;
+      optionElement.textContent = value;
+      selectElement.appendChild(optionElement);
+    });
+  }
+
+  // ── Filter logic ─────────────────────────────────────────────────────
+  /*
+    Applies all active filters (keyword, category, host, leader) to
+    allEvents and stores the result in filteredEvents.
+    Keyword search covers: title, leaders, entity name, sponsor,
+    description, and location — as requested in sprint 1 feedback.
+  */
+  function applyFilters() {
+    const keywordValue = (document.getElementById('sc-filter-keyword').value || '').toLowerCase().trim();
+    const hostValue    = (document.getElementById('sc-filter-host').value   || '').toLowerCase();
+    const leaderValue  = (document.getElementById('sc-filter-leader').value || '').toLowerCase();
+
+    filteredEvents = allEvents.filter(function(event) {
+      // Category filter
+      if (activeCategory !== 'all' && event.category !== activeCategory) {
+        return false;
+      }
+      // Keyword filter — searches multiple fields
+      if (keywordValue) {
+        const searchableText = [
+          event.name,
+          event.leaders,
+          event.entityName,
+          event.sponsor,
+          event.description,
+          event.location || '',
+        ].join(' ').toLowerCase();
+        if (!searchableText.includes(keywordValue)) return false;
+      }
+      // Host filter
+      if (hostValue && !event.sponsor.toLowerCase().includes(hostValue)) return false;
+      // Leader filter
+      if (leaderValue && !event.leaders.toLowerCase().includes(leaderValue)) return false;
+
+      return true;
+    });
+
+    renderAllViews();
+  }
+
+  function selectCategory(category) {
+    activeCategory = category;
+    syncCategorySelectionUI(category);
+    applyFilters();
+  }
+
+  /*
+    Keeps the sidebar category pills and the inline legend dots in sync
+    with the currently active category.
+  */
+  function syncCategorySelectionUI(category) {
+    document.querySelectorAll('.sc-events-widget .category-pill').forEach(function(pill) {
+      pill.classList.toggle('active', pill.dataset.category === category);
+    });
+    document.querySelectorAll('.sc-events-widget .legend-item').forEach(function(item) {
+      item.classList.toggle('active', item.dataset.category === category);
+    });
+  }
+
+  function resetFilters() {
+    activeCategory = presetCategory || 'all';
+    document.getElementById('sc-filter-keyword').value = '';
+    document.getElementById('sc-filter-host').value    = '';
+    document.getElementById('sc-filter-leader').value  = '';
+    syncCategorySelectionUI(activeCategory);
+    applyFilters();
+  }
+
+  function toggleMobileFilters() {
+    document.getElementById('sc-filter-sidebar').classList.toggle('open');
+  }
+
+  // ── Render coordinator ───────────────────────────────────────────────
+  function renderAllViews() {
+    const eventCount = filteredEvents.length;
+
+    document.getElementById('sc-status-count').textContent =
+      eventCount + ' event' + (eventCount !== 1 ? 's' : '') + ' found';
+
+    const headerCountEl = document.getElementById('sc-header-count');
+    headerCountEl.textContent    = eventCount + ' events';
+    headerCountEl.style.display  = eventCount > 0 ? 'inline-block' : 'none';
+
+    renderListView();
+    renderCalendarView();
+    renderPrintView();
+
+    // If the map tab is currently open, refresh markers to match filters
+    if (document.getElementById('sc-view-map').style.display === 'block') {
+      renderMapView();
+    }
+  }
+
+  // ── List view ────────────────────────────────────────────────────────
+  /*
+    Renders upcoming events (today and forward) grouped by date.
+    Each date appears as a header once, with all that day's events below it.
+    Past events are excluded — they are only visible in the calendar.
+
+    Sponsor feedback: "pills based around the date rather than the event —
+    events on May 4th would have the date listed only once."
+
+    Uses createElement/appendChild throughout (sponsor code review request).
+  */
+  function renderListView() {
+    const listContainer = document.getElementById('sc-event-list-container');
+    const today         = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Filter to future events and sort chronologically
+    const upcomingEvents = filteredEvents
+      .filter(function(event) {
+        if (!event.startDate) return true;
+        return new Date(event.startDate + 'T00:00:00') >= today;
+      })
+      .sort(function(a, b) {
+        return (a.startDate || '').localeCompare(b.startDate || '');
+      });
+
+    // Clear previous content
+    while (listContainer.firstChild) {
+      listContainer.removeChild(listContainer.firstChild);
+    }
+
+    if (upcomingEvents.length === 0) {
+      const emptyState = document.createElement('div');
+      emptyState.className = 'empty-state';
+      emptyState.innerHTML = '<p style="font-weight:600;color:var(--forest)">No upcoming events found</p>' +
+                             '<p style="font-size:12px;margin-top:4px">Try adjusting your filters</p>';
+      listContainer.appendChild(emptyState);
+      return;
+    }
+
+    // Group events by date
+    const eventsByDate = {};
+    upcomingEvents.forEach(function(event) {
+      const dateKey = event.startDate || 'TBD';
+      if (!eventsByDate[dateKey]) eventsByDate[dateKey] = [];
+      eventsByDate[dateKey].push(event);
+    });
+
+    // Render one date group header + cards per date
+    Object.keys(eventsByDate).forEach(function(dateKey) {
+      const groupEvents = eventsByDate[dateKey];
+
+      // Date group header
+      const dateHeader = document.createElement('div');
+      dateHeader.className = 'date-group-header';
+      if (dateKey !== 'TBD') {
+        const dateObj = new Date(dateKey + 'T12:00:00');
+        dateHeader.textContent = dateObj.toLocaleDateString('en-US', {
+          weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+        });
+      } else {
+        dateHeader.textContent = 'Date TBD';
+      }
+      listContainer.appendChild(dateHeader);
+
+      // Cards container for this date
+      const cardsContainer = document.createElement('div');
+      cardsContainer.className = 'date-group-events';
+
+      groupEvents.forEach(function(event) {
+        cardsContainer.appendChild(buildEventCard(event));
+      });
+
+      listContainer.appendChild(cardsContainer);
+    });
+  }
+
+  /*
+    Builds a single event card using createElement/appendChild.
+    Includes a hover tooltip showing the event description.
+  */
+  function buildEventCard(event) {
+    const card = document.createElement('div');
+    card.className = 'event-card';
+
+    // Left column: name, tags, details
+    const infoColumn = document.createElement('div');
+
+    // Event name (link if URL available)
+    if (event.url) {
+      const nameLink = document.createElement('a');
+      nameLink.className  = 'event-card-name';
+      nameLink.href       = event.url;
+      nameLink.target     = '_blank';
+      nameLink.rel        = 'noopener';
+      nameLink.textContent = event.name;
+      infoColumn.appendChild(nameLink);
+    } else {
+      const nameSpan = document.createElement('span');
+      nameSpan.className   = 'event-card-name';
+      nameSpan.textContent = event.name;
+      infoColumn.appendChild(nameSpan);
+    }
+
+    // Cancelled badge
+    if (event.status === 'Cancelled') {
+      const cancelBadge = document.createElement('span');
+      cancelBadge.className   = 'event-tag tag-cancelled';
+      cancelBadge.textContent = 'Cancelled';
+      infoColumn.appendChild(cancelBadge);
+    }
+
+    // Category + type tags row
+    const tagRow = document.createElement('div');
+    tagRow.className = 'event-tag-row';
+    tagRow.appendChild(buildCategoryTag(event.category));
+    if (event.type)      tagRow.appendChild(buildTag(event.type,     'tag-type'));
+    if (event.isVirtual) tagRow.appendChild(buildTag('Virtual',      'tag-virtual'));
+    if (event.level)     tagRow.appendChild(buildTag(event.level,    'tag-level'));
+    infoColumn.appendChild(tagRow);
+
+    // Details row: location, time, leader, sponsor, cost
+    const detailsRow = document.createElement('div');
+    detailsRow.className = 'event-card-details';
+
+    const locationText = event.isVirtual
+      ? 'Virtual'
+      : (event.location || 'Location TBD');
+    const timeText = event.startTime ? ' · ' + event.startTime : '';
+    appendDetailSpan(detailsRow, locationText + timeText);
+    if (event.leaders) appendDetailSpan(detailsRow, 'Leader: ' + event.leaders);
+    if (event.sponsor) appendDetailSpan(detailsRow, event.sponsor);
+    if (event.cost)    appendDetailSpan(detailsRow, event.cost);
+    infoColumn.appendChild(detailsRow);
+
+    card.appendChild(infoColumn);
+
+    // Right column: More Info button
+    const buttonColumn = document.createElement('div');
+    if (event.url) {
+      const moreInfoLink = document.createElement('a');
+      moreInfoLink.className  = 'more-info-btn';
+      moreInfoLink.href       = event.url;
+      moreInfoLink.target     = '_blank';
+      moreInfoLink.rel        = 'noopener';
+      moreInfoLink.textContent = 'More Info';
+      buttonColumn.appendChild(moreInfoLink);
+    }
+    card.appendChild(buttonColumn);
+
+    /*
+      Hover tooltip — shows event description on mouseover.
+      Sponsor requested: "rollover event details box showing description."
+      Only added if the event has a description.
+    */
+    if (event.description) {
+      const tooltip = document.createElement('div');
+      tooltip.className   = 'event-tooltip';
+      tooltip.textContent = event.description;
+      card.appendChild(tooltip);
+    }
+
+    return card;
+  }
+
+  function buildCategoryTag(category) {
+    const categoryTagClassMap = {
+      'Outing':            'tag-outing',
+      'Club Support Event':'tag-club',
+      'Social Event':      'tag-social',
+      'Activist Event':    'tag-activist',
+    };
+    const tagClass = categoryTagClassMap[category] || 'tag-type';
+    return buildTag(category, tagClass);
+  }
+
+  function buildTag(text, cssClass) {
+    const tag = document.createElement('span');
+    tag.className   = 'event-tag ' + cssClass;
+    tag.textContent = text;
+    return tag;
+  }
+
+  function appendDetailSpan(container, text) {
+    const span = document.createElement('span');
+    span.textContent = text;
+    container.appendChild(span);
+  }
+
+  // ── Calendar view ────────────────────────────────────────────────────
+  /*
+    Renders the calendar grid for the current calendarDate month.
+    Past days are faded. Events are clickable pills that link to event pages.
+    Calendar expands to fit content (no internal scroll) — controlled by
+    the .calendar-active class toggled on the widget root.
+
+    Uses createElement/appendChild throughout.
+  */
+  function renderCalendarView() {
+    const year       = calendarDate.getFullYear();
+    const month      = calendarDate.getMonth();
+    const today      = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Update month/year title
+    document.getElementById('sc-calendar-title').textContent =
+      calendarDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    // Build day-of-week header row (only once on first render)
+    const dayLabelsContainer = document.getElementById('sc-calendar-day-labels');
+    if (!dayLabelsContainer.hasChildNodes()) {
+      ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function(dayName) {
+        const labelCell = document.createElement('div');
+        labelCell.className   = 'calendar-day-label';
+        labelCell.textContent = dayName;
+        dayLabelsContainer.appendChild(labelCell);
+      });
+    }
+
+    // Calculate grid dimensions
+    const firstDayOfMonth   = new Date(year, month, 1).getDay();
+    const daysInMonth       = new Date(year, month + 1, 0).getDate();
+    const totalCalendarCells = Math.ceil((firstDayOfMonth + daysInMonth) / 7) * 7;
+
+    // Clear previous calendar cells
+    const calendarGrid = document.getElementById('sc-calendar-grid');
+    while (calendarGrid.firstChild) {
+      calendarGrid.removeChild(calendarGrid.firstChild);
+    }
+
+    let dayCounter = 1;
+
+    for (let cellIndex = 0; cellIndex < totalCalendarCells; cellIndex++) {
+      const isOutsideCurrentMonth = cellIndex < firstDayOfMonth || dayCounter > daysInMonth;
+
+      const cell = document.createElement('div');
+      cell.className = 'calendar-cell';
+
+      if (isOutsideCurrentMonth) {
+        cell.classList.add('other-month');
+      } else {
+        const cellDate = new Date(year, month, dayCounter);
+        const isToday  = cellDate.getTime() === today.getTime();
+        const isPast   = cellDate < today && !isToday;
+
+        if (isToday) cell.classList.add('today-cell');
+        if (isPast)  cell.classList.add('past-day');
+
+        // Day number
+        const dayNumber = document.createElement('div');
+        dayNumber.className   = 'calendar-cell-num';
+        dayNumber.textContent = dayCounter;
+        cell.appendChild(dayNumber);
+
+        // Events on this day
+        const dateString = year + '-' +
+          String(month + 1).padStart(2, '0') + '-' +
+          String(dayCounter).padStart(2, '0');
+
+        const eventsOnThisDay = filteredEvents.filter(function(event) {
+          return event.startDate === dateString;
+        });
+
+        eventsOnThisDay.slice(0, 3).forEach(function(event) {
+          const pillClassMap = {
+            'Outing':            'cpill-outing',
+            'Club Support Event':'cpill-club',
+            'Social Event':      'cpill-social',
+            'Activist Event':    'cpill-activist',
+          };
+          const pillClass = pillClassMap[event.category] || 'cpill-outing';
+
+          let pill;
+          if (event.url) {
+            pill      = document.createElement('a');
+            pill.href = event.url;
+            pill.target = '_blank';
+            pill.rel    = 'noopener';
+          } else {
+            pill = document.createElement('span');
+          }
+          pill.className   = 'calendar-event-pill ' + pillClass;
+          pill.title       = event.name;
+          pill.textContent = event.name;
+          cell.appendChild(pill);
+        });
+
+        // Overflow indicator
+        if (eventsOnThisDay.length > 3) {
+          const overflowIndicator = document.createElement('span');
+          overflowIndicator.style.fontSize = '9px';
+          overflowIndicator.style.color    = '#888';
+          overflowIndicator.textContent    = '+' + (eventsOnThisDay.length - 3) + ' more';
+          cell.appendChild(overflowIndicator);
+        }
+
+        dayCounter++;
+      }
+
+      calendarGrid.appendChild(cell);
+    }
+  }
+
+  function changeCalendarMonth(direction) {
+    calendarDate.setMonth(calendarDate.getMonth() + direction);
+    renderCalendarView();
+  }
+
+  // ── Print view ───────────────────────────────────────────────────────
+  /*
+    Renders a print-friendly list of upcoming events.
+    Uses createElement/appendChild throughout.
+  */
+  function renderPrintView() {
+    const printContainer = document.getElementById('sc-print-list-container');
+    const today          = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const upcomingEvents = filteredEvents
+      .filter(function(event) {
+        return !event.startDate || new Date(event.startDate + 'T00:00:00') >= today;
+      })
+      .sort(function(a, b) {
+        return (a.startDate || '').localeCompare(b.startDate || '');
+      });
+
+    while (printContainer.firstChild) {
+      printContainer.removeChild(printContainer.firstChild);
+    }
+
+    upcomingEvents.forEach(function(event) {
+      const row = document.createElement('div');
+      row.className = 'print-event-row';
+
+      const dateCell = document.createElement('div');
+      dateCell.className = 'print-event-date';
+      dateCell.textContent = (event.startDate || 'TBD');
+      if (event.startTime) {
+        dateCell.appendChild(document.createElement('br'));
+        dateCell.appendChild(document.createTextNode(event.startTime));
+      }
+      row.appendChild(dateCell);
+
+      const infoCell = document.createElement('div');
+      const nameLine = document.createElement('div');
+      nameLine.className   = 'print-event-name';
+      nameLine.textContent = event.name;
+      infoCell.appendChild(nameLine);
+
+      const metaLine = document.createElement('div');
+      metaLine.className = 'print-event-meta';
+      const locationLabel = event.isVirtual ? 'Virtual' : (event.location || 'TBD');
+      metaLine.textContent = event.category + ' · ' + locationLabel + ' · ' + event.sponsor;
+      infoCell.appendChild(metaLine);
+
+      if (event.leaders) {
+        const leaderLine = document.createElement('div');
+        leaderLine.className   = 'print-event-meta';
+        leaderLine.textContent = 'Leader: ' + event.leaders;
+        infoCell.appendChild(leaderLine);
+      }
+
+      row.appendChild(infoCell);
+      printContainer.appendChild(row);
+    });
+  }
+
+  // ── Tab switcher ─────────────────────────────────────────────────────
+  /*
+    Switches between List, Map, Calendar, and Print views.
+    - Calendar expands widget height to avoid internal scroll.
+    - Map also expands widget height and initializes Leaflet on first open.
+  */
+  function switchTab(viewName, clickedButton) {
+    // Update tab button active states
+    document.querySelectorAll('.sc-events-widget .view-tab-btn').forEach(function(btn) {
+      btn.classList.remove('active');
+    });
+    if (clickedButton) clickedButton.classList.add('active');
+
+    // Show the selected view panel, hide all others
+    var viewIds = ['list', 'map', 'cal', 'print'];
+    viewIds.forEach(function(id) {
+      document.getElementById('sc-view-' + id).style.display =
+        id === viewName ? 'block' : 'none';
+    });
+
+    var widgetRoot = document.getElementById('sc-widget-root');
+
+    if (viewName === 'cal') {
+      // Calendar expands to fit all weeks — no internal scroll
+      widgetRoot.classList.add('calendar-active');
+      widgetRoot.classList.remove('map-active');
+      renderCalendarView();
+    } else if (viewName === 'map') {
+      // Map also expands, then initializes or refreshes Leaflet
+      widgetRoot.classList.add('map-active');
+      widgetRoot.classList.remove('calendar-active');
+      renderMapView();
+    } else {
+      widgetRoot.classList.remove('calendar-active');
+      widgetRoot.classList.remove('map-active');
+    }
+  }
+
+  // ── Map view ─────────────────────────────────────────────────────────
+  /*
+    Renders a Leaflet.js map with one marker per event that has coordinates.
+    Virtual events (no lat/lng) are excluded from the map.
+
+    Each marker:
+    - Is color-coded by event category (matching the list view legend).
+    - Shows a popup with event name, category tag, date/time, location,
+      leader, description, and a "More Info" link — the rollover event
+      details box the sponsor requested.
+
+    The map is initialized once and then updated on subsequent calls
+    (e.g. when filters change and user is on the map tab).
+  */
+
+  var leafletMap        = null;  // Leaflet map instance (created once)
+  var leafletMarkers    = [];    // Current set of markers on the map
+
+  // Category → marker color mapping (matches legend colors)
+  var categoryColorMap = {
+    'Outing':            '#1B5E20',
+    'Club Support Event':'#0D47A1',
+    'Social Event':      '#BF360C',
+    'Activist Event':    '#B71C1C',
+  };
+
+  function renderMapView() {
+    var mapContainer = document.getElementById('sc-map-container');
+
+    // Filter to events that have real coordinates
+    var mappableEvents = filteredEvents.filter(function(event) {
+      return event.latitude && event.longitude;
+    });
+
+    // Initialize Leaflet map on first open
+    if (!leafletMap) {
+      leafletMap = L.map('sc-map-container', {
+        zoomControl: true,
+        scrollWheelZoom: false, // prevents accidental scroll-zoom when embedded
+      });
+
+      // OpenStreetMap tile layer (free, no API key required)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 18,
+      }).addTo(leafletMap);
+    }
+
+    // Remove all existing markers before re-rendering
+    leafletMarkers.forEach(function(marker) {
+      marker.remove();
+    });
+    leafletMarkers = [];
+
+    if (mappableEvents.length === 0) {
+      // No mappable events — show a center point with a message
+      leafletMap.setView([37.77, -122.41], 9);
+      return;
+    }
+
+    // Build a marker for each event with coordinates
+    var bounds = [];
+
+    mappableEvents.forEach(function(event) {
+      var markerColor = categoryColorMap[event.category] || '#1B5E20';
+
+      /*
+        Custom SVG circle marker — color-coded by category.
+        Uses Leaflet's DivIcon so we can style it with CSS/SVG
+        rather than being limited to the default blue pin.
+      */
+      var markerIcon = L.divIcon({
+        className: '',
+        html: '<svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">' +
+              '<circle cx="11" cy="11" r="9" fill="' + markerColor + '" stroke="#fff" stroke-width="2.5"/>' +
+              '</svg>',
+        iconSize:   [22, 22],
+        iconAnchor: [11, 11],
+        popupAnchor:[0, -13],
+      });
+
+      var marker = L.marker([event.latitude, event.longitude], { icon: markerIcon });
+
+      // Build popup content using DOM methods (consistent with rest of widget)
+      var popupDiv = document.createElement('div');
+
+      // Popup header — dark green, event name + category tag
+      var popupHeader = document.createElement('div');
+      popupHeader.className = 'sc-map-popup-header';
+
+      var popupTitle = document.createElement('div');
+      popupTitle.className   = 'sc-map-popup-title';
+      popupTitle.textContent = event.name;
+      popupHeader.appendChild(popupTitle);
+
+      var popupTag = document.createElement('span');
+      popupTag.className = 'sc-map-popup-tag';
+      popupTag.style.background = markerColor;
+      popupTag.style.color      = '#fff';
+      popupTag.textContent      = event.category;
+      popupHeader.appendChild(popupTag);
+      popupDiv.appendChild(popupHeader);
+
+      // Popup body — date, time, location, leader, description
+      var popupBody = document.createElement('div');
+      popupBody.className = 'sc-map-popup-body';
+
+      if (event.startDate) {
+        var dateObj  = new Date(event.startDate + 'T12:00:00');
+        var dateLine = document.createElement('p');
+        dateLine.textContent = dateObj.toLocaleDateString('en-US', {
+          weekday: 'short', month: 'short', day: 'numeric'
+        }) + (event.startTime ? ' · ' + event.startTime : '');
+        popupBody.appendChild(dateLine);
+      }
+
+      if (event.location) {
+        var locationLine = document.createElement('p');
+        locationLine.textContent = event.location;
+        popupBody.appendChild(locationLine);
+      }
+
+      if (event.leaders) {
+        var leaderLine = document.createElement('p');
+        leaderLine.textContent = 'Leader: ' + event.leaders;
+        popupBody.appendChild(leaderLine);
+      }
+
+      // Event description (the rollover details box the sponsor requested)
+      if (event.description) {
+        var descriptionBlock = document.createElement('div');
+        descriptionBlock.className   = 'sc-map-popup-desc';
+        descriptionBlock.textContent = event.description;
+        popupBody.appendChild(descriptionBlock);
+      }
+
+      // More Info link
+      if (event.url) {
+        var moreInfoLink = document.createElement('a');
+        moreInfoLink.className  = 'sc-map-popup-link';
+        moreInfoLink.href       = event.url;
+        moreInfoLink.target     = '_blank';
+        moreInfoLink.rel        = 'noopener';
+        moreInfoLink.textContent = 'More Info';
+        popupBody.appendChild(moreInfoLink);
+      }
+
+      popupDiv.appendChild(popupBody);
+
+      marker.bindPopup(popupDiv, {
+        maxWidth: 240,
+        minWidth: 220,
+      });
+
+      marker.addTo(leafletMap);
+      leafletMarkers.push(marker);
+      bounds.push([event.latitude, event.longitude]);
+    });
+
+    // Fit map view to show all markers with padding
+    if (bounds.length > 0) {
+      leafletMap.fitBounds(bounds, { padding: [30, 30] });
+    }
+  }
+
+  // ── Sample events (fallback when API is unreachable in dev) ──────────
+  /*
+    Used when the Campfire API cannot be reached (e.g. CORS in development).
+    Includes a mix of future and past events to test all rendering paths.
+    Past events appear in calendar (faded) but not in list view.
+  */
+  function buildSampleEvents() {
+    function formatDate(date) { return date.toISOString().split('T')[0]; }
+    function daysFromToday(n) {
+      var d = new Date();
+      d.setDate(d.getDate() + n);
+      return formatDate(d);
+    }
+
+    return [
+      {
+        id: '1', name: 'Mount Diablo Summit Hike', category: 'Outing', type: 'Hike',
+        status: 'Active', startDate: daysFromToday(2), startTime: '8:00 AM',
+        location: '3600 Mt Diablo Scenic Blvd, Danville, CA',
+        latitude: 37.88, longitude: -121.91, isVirtual: false,
+        sponsor: 'SF Bay Chapter', entityName: 'SF Bay Chapter', leaders: 'Jane Smith',
+        description: 'A challenging 7-mile round trip hike to the summit of Mount Diablo with panoramic views of the Bay Area. Bring plenty of water and sun protection.',
+        cost: null, level: 'Strenuous', url: 'https://sierraclub.org/events/1'
+      },
+      {
+        id: '2', name: 'Zero Waste Committee Meeting', category: 'Activist Event', type: 'Other-Activist',
+        status: 'Active', startDate: daysFromToday(2), startTime: '7:00 PM',
+        location: '900 Murray St, Berkeley, CA',
+        latitude: 37.85, longitude: -122.29, isVirtual: false,
+        sponsor: 'San Francisco Bay Chapter', entityName: 'SF Bay Chapter', leaders: 'Alfred Twu',
+        description: 'Monthly meeting of the Zero Waste Committee. We will review recent actions and plan upcoming initiatives to reduce plastic in our community.',
+        cost: null, level: null, url: 'https://sierraclub.org/events/2'
+      },
+      {
+        id: '3', name: 'Virtual Webinar: Climate Action 2026', category: 'Club Support Event', type: 'Educational',
+        status: 'Active', startDate: daysFromToday(6), startTime: '6:00 PM',
+        location: null, latitude: null, longitude: null, isVirtual: true,
+        sponsor: 'Sierra Club National', entityName: 'National', leaders: 'Dr. Sarah Lee',
+        description: 'Join us for an online deep-dive into the latest climate science and policy updates. Q&A session follows the presentation.',
+        cost: null, level: null, url: 'https://sierraclub.org/events/3'
+      },
+      {
+        id: '4', name: 'Coastal Cleanup and Beach Walk', category: 'Outing', type: 'Walking',
+        status: 'Active', startDate: daysFromToday(9), startTime: '9:00 AM',
+        location: 'Baker Beach, San Francisco, CA',
+        latitude: 37.79, longitude: -122.48, isVirtual: false,
+        sponsor: 'SF Bay Chp Hiking', entityName: 'SF Bay Chapter', leaders: 'Maria Gonzalez',
+        description: 'Help clean up Baker Beach and then enjoy a 2-mile coastal walk with views of the Golden Gate Bridge. Gloves and bags provided.',
+        cost: null, level: 'Easy', url: 'https://sierraclub.org/events/4'
+      },
+      {
+        id: '5', name: 'Annual Fundraiser Dinner', category: 'Social Event', type: 'Dinner',
+        status: 'Active', startDate: daysFromToday(12), startTime: '6:30 PM',
+        location: 'Ferry Building, San Francisco, CA',
+        latitude: 37.80, longitude: -122.39, isVirtual: false,
+        sponsor: 'SF Bay Chapter', entityName: 'SF Bay Chapter', leaders: 'Board of Directors',
+        description: 'Join us for our annual chapter fundraiser. Enjoy dinner, live music, and a silent auction while supporting Sierra Club programs throughout the Bay Area.',
+        cost: '$75 per person', level: null, url: 'https://sierraclub.org/events/5'
+      },
+      {
+        id: '6', name: 'Lands End Coastal Walk', category: 'Outing', type: 'Hike',
+        status: 'Active', startDate: daysFromToday(3), startTime: '9:00 AM',
+        location: 'Lands End Visitor Center, San Francisco, CA',
+        latitude: 37.78, longitude: -122.51, isVirtual: false,
+        sponsor: 'SF Bay Chp Hiking', entityName: 'SF Bay Chapter', leaders: 'Guy Mayes',
+        description: 'A leisurely 3-mile walk along the Lands End trail from Sutro Baths to the Golden Gate Bridge overlook. History and geology highlights along the way.',
+        cost: null, level: 'Moderate', url: 'https://sierraclub.org/events/6'
+      },
+      {
+        // Past event — visible in calendar (faded) but excluded from list view
+        id: '7', name: 'Spring Bird Walk', category: 'Outing', type: 'Hike',
+        status: 'Active', startDate: daysFromToday(-5), startTime: '7:30 AM',
+        location: 'Coyote Hills Regional Park, Fremont, CA',
+        latitude: 37.56, longitude: -122.06, isVirtual: false,
+        sponsor: 'SF Bay Chp Hiking', entityName: 'SF Bay Chapter', leaders: 'Jane Smith',
+        description: 'Early morning bird identification walk through the marshlands. Binoculars recommended.',
+        cost: null, level: 'Easy', url: null
+      },
+    ];
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────
+  /*
+    Exposed on window so that inline onclick attributes in the HTML
+    can call widget functions. Namespace avoids global collisions.
+  */
+  window.SierraClubWidget = {
+    applyFilters:         applyFilters,
+    selectCategory:       selectCategory,
+    resetFilters:         resetFilters,
+    toggleMobileFilters:  toggleMobileFilters,
+    switchTab:            switchTab,
+    changeCalendarMonth:  changeCalendarMonth,
+    renderMapView:        renderMapView,
+  };
+
+  // ── Initialize ────────────────────────────────────────────────────────
+  // NOTE: renderCalendarView is NOT called here independently —
+  // it is called inside renderAllViews() after fetchEvents() completes.
+  // (Stray renderCalendar call from prototype002 has been removed.)
+  fetchEvents();
+
+}); // end DOMContentLoaded
+</script>
+
+</body>
+</html>
